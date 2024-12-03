@@ -5,16 +5,28 @@
 #include <sstream> //spliting the command line
 #include <utility>
 #include "../Orders/Orders.h"
+#include "../PlayerStrategies/PlayerStrategies.h"
 
 
 //Player::Player(){}; 
 Player::Player() : _orderList(new OrdersList()) {} // Added - K - A2
 
+//Player constructor for only name and id
 Player::Player(const string &name, int* id){
     this->_name = name;
     this->_id=new int(*id);
     this->_orderList=new OrdersList();
+    setPlayerStrategy("Human");
 }
+
+//Player constructor for name, id and strategy
+Player::Player(const std::string &name, int *id, const std::string &strategy) {
+    this->_name = name;
+    this->_id=new int(*id);
+    this->_orderList=new OrdersList();
+    setPlayerStrategy(strategy);
+}
+
 
 //copy constructor
 Player::Player(const Player& other)
@@ -23,6 +35,7 @@ Player::Player(const Player& other)
     this->_territories = other._territories;
     this->_handCard = other._handCard;
     this->_playerterritories = other._playerterritories;
+    setPlayerStrategy(other.getPlayerStrategy());
     _orderList = new OrdersList(*other._orderList);
 }
 
@@ -53,6 +66,45 @@ Player& Player::operator=(const Player& other) {
     return *this;
 }
 
+
+//Set player strategy based on string
+void Player::setPlayerStrategy(const string &strategy) {
+
+        if (strategy=="Human"){
+            if (playerStrategy == nullptr)
+                delete playerStrategy;
+            playerStrategy = new HumanPlayerStrategy(this);
+        }
+
+        else if (strategy=="Aggressive"){
+            if (playerStrategy == nullptr)
+                delete playerStrategy;
+            playerStrategy = new AggressivePlayerStrategy(this);
+        }
+
+        else if (strategy =="Benevolent"){
+            if (playerStrategy == nullptr)
+                delete playerStrategy;
+            playerStrategy = new BenevolentPlayerStrategy(this);
+        }
+
+        else if (strategy=="Neutral"){
+            if (playerStrategy == nullptr)
+                delete playerStrategy;
+            playerStrategy = new NeutralPlayerStrategy(this);
+        }
+
+        else if (strategy=="Cheater"){
+            if (playerStrategy == nullptr)
+                delete playerStrategy;
+            playerStrategy = new CheaterPlayerStrategy(this);
+        }
+}
+
+//Basic getter for strategy
+std::string Player::getPlayerStrategy() const{
+    return playerStrategy->getStrategy();
+}
 
 void Player::printOrder() const { // changed - K - A2
     if (_orderList->getSize() == 0) {
@@ -142,155 +194,10 @@ bool Player::hasCardType(const std::string& cardType) {
 //                 Issue Order
 // --------------------------------------------------
 
-void Player::issueOrder(const std::string& command, int* playerId){
-    //get the arguments from command arg[0] -> should mention to the player how to enter the command
-    //command :  deploy 50 canada | arg[0]->deploy ; arg[1]->numbr of units ; arg[2]->terriroty on which the player deploys his armies
-    //switch case of if deploy, if advance , if bomb , if airlift , if blockade , if negociate
-
-    // the split words
-    std::vector<std::string> args;
-
-    // string stream to split the command by spaces
-    std::istringstream iss(command);
-    std::string word;
-    while (iss >> word) {
-        args.push_back(word); //trims words
-    }
-
-    //if deploy : arg[0] = deploy and reinforce>0 (aka player has troops)
-    if (args[0] == "deploy" && *_reinforcementPool>0 && *_reinforcementPool>=std::stoi(args[1])) { // player should have units to deploy - otherwise cannot deploy
-        //command deploy 15 canada
-        //Deploy(string orderName,Territory* toDeploy,int* playerIndex,int* nUnits); - signature
-
-        std::string orderName = args[0];  // e.g., "deploy"
-
-        //COUNTRIES WITH MULTIPLE WORDS
-        std::string toDeploy = args[2];
-        if (args.size() == 4) {
-            toDeploy += " " + args[3];
-        }
-
-        /*
-        for (int i = 3; i < args.size(); i++) {
-          toDeploy += " " + args[i];
-        }
-         */
-        Territory* toDeployIn = findTerritoryByName(toDeploy);
-        //MAKE SURE THAT THIS IS A POINTER AND NOT A VARIABLS
-        int* nUnits = new int(std::stoi(args[1]));  // to convert the number of units to int
-        //Deploy* deployOrder = new Deploy(orderName, toDeploy, playerIndex, new int(nUnits));
-        _orderList->addOrder(new Deploy(orderName, toDeployIn, playerId, nUnits));
-
-        *_reinforcementPool=*_reinforcementPool-std::stoi(args[1]);
-
-    } else if (args[0] == "advance" && *_reinforcementPool==0) { //player should deploy all the units before advancing // more conditions?
-        //command : advance 12 iraq , iran
-        // Advance::Advance(string orderName,int* playerIndex,Territory* advanceFrom,Territory* advanceTo,int* nUnits) - signature
-        std::string orderName = args[0];  
-        int* nUnits = new int(std::stoi(args[1]));
-        int counter = 2;
-        std::string owned = args[2];
-        for(counter=3;counter<args.size();counter++){
-            if(args[counter] == ","){
-                break;
-            }
-            else{
-                owned += " "+args[counter];
-            }
-        }
-        std::string target = args[++counter];
-        for(++counter;counter<args.size();counter++){
-            target += " "+args[counter];
-        }
-        cout<<"Advancing from: "<<owned<<endl;
-        cout<<"Advancing to: "<<target<<endl;
-
-        Territory* _owned = findTerritoryByName(owned);
-        Territory* _target = findTerritoryByName(target);
-
-        cout<<*(_target->name)<<endl;
-
-        //territories should be the adjacent territories
-        _orderList->addOrder(new Advance(orderName, playerId, _owned, _target, nUnits));
-
-    } else if (args[0] == "blockade" && *_reinforcementPool==0) { 
-        //command : blockade indonesia
-        //Blockade::Blockade(string orderName,int* playerIndex,Territory* toBlock) - Signature
-        if (hasCardType("blockade")) {
-            std::string orderName = args[0]; 
-            std::string target = args[1];
-            if (args.size() == 3) {
-                target += " " + args[2];
-            }
-            Territory* _target = findTerritoryByName(target);
-
-            cout<<*(_target->name)<<"Is preparing a blockade!!!"<<endl;
-
-            _orderList->addOrder(new Blockade(orderName, playerId, _target));
-        } else {
-            std::cout << "You do not have a blockade card.\n";
-        }
-
-    } else if (args[0] == "airlift" && *_reinforcementPool==0) {
-        //command : airlift 18 indonesia philippines
-        //Airlift::Airlift(string orderName,int* playerIndex,Territory* airliftFrom,Territory* airliftTo,int* nUnits) -- Signature
-        if (hasCardType("airlift")) {
-            std::string orderName = args[0];  
-            int* nUnits = new int(std::stoi(args[1]));
-            std::string owned = args[2];
-            std::string target = args[3];
-
-            Territory* _owned = findTerritoryByName(owned);
-            Territory* _target = findTerritoryByName(target);
-            int* playerIndex = playerId;
-
-            _orderList->addOrder(new Airlift(orderName, playerIndex, _owned, _target, nUnits));
-        } else {
-            std::cout << "You do not have an Airlift card.\n";
-        }
-
-    } else if (args[0] == "negotiate" && *_reinforcementPool==0) {
-        //command : negociate
-        // Negotiate::Negotiate(string orderName,int* playerIndex)
-        if (hasCardType("diplomacy")) {
-            std::string orderName = args[0];
-            int* playerIndex = playerId;
-            int toNegotiate = std::stoi(args[1]);
-
-
-            _orderList->addOrder(new Negotiate(orderName, playerIndex, toNegotiate));
-        } else {
-            std::cout << "You do not have a Negociate card.\n";
-        }
-
-    } else if (args[0] == "bomb" && *_reinforcementPool==0) {
-        //command : bomb philippines
-        // Bomb::Bomb(string orderName,int* playerIndex,Territory* toBomb) -- Signature
-        if (hasCardType("bomb")) { 
-            std::string orderName = args[0];  
-            std::string target = args[1];
-            if (args.size() == 3) {
-                target += " " + args[2];
-            }
-            Territory* _target = findTerritoryByName(target);
-            int* playerIndex = playerId;
-
-            cout<<"Target to be bombed "<<*(_target->name)<<endl;
-
-            Bomb* bombOrder = new Bomb(orderName, playerIndex, _target);
-            _orderList->addOrder(bombOrder);
-        } else {
-            std::cout << "You do not have a Bomb card.\n";
-        }
-
-    // Player has done turn
-    }else if(args[0]=="done"){
-            *this->_doneTurn=true;
-        } 
-    
-    else {
-        std::cout << "Command: " << args[0] << " failed to process." << std::endl;
-    }
+void Player::issueOrder(){
+    //--------------PLAYER STRATEGY----------------------
+    playerStrategy->issueOrder();
+    //---------------------------------------------------
 
 }
 
@@ -300,18 +207,7 @@ void Player::issueOrder(const std::string& command, int* playerId){
 //              Territories to attack
 // --------------------------------------------------
 std::vector<Territory*> Player::toAttack() const {
-    std::vector<Territory*> territoriesToAttack;
-
-    // Loop through all territories in the game map
-    for (int i=0; i<gameMap.graph.size();i++) {
-        // Check if the territory is not owned by the player
-        if (*gameMap.graph.at(i).owner!=*_id) {
-            // Territory is available for attack, push back the pointer to the territory
-            territoriesToAttack.push_back(&gameMap.graph.at(i));
-        }
-    }
-
-    return territoriesToAttack;
+    return playerStrategy->toAttack();
 }
 
 
@@ -320,16 +216,7 @@ std::vector<Territory*> Player::toAttack() const {
 //              Territories to defend
 // --------------------------------------------------
 std::vector<Territory*> Player::toDefend() const {
-    std::vector<Territory*> territoriesToDefend;
-
-    // Add all player-owned territories to the vector
-    for (int i=0; i<gameMap.graph.size();i++) { // Each time the player concquer a territory, it should be added in _playerTerritory
-        if (*gameMap.graph.at(i).owner==*_id) {
-            territoriesToDefend.push_back(&gameMap.graph.at(i));
-        }
-    }
-
-    return territoriesToDefend;
+    return playerStrategy->toDefend();
 }
 
 

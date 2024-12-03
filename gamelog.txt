@@ -1,6 +1,5 @@
-Order Issued: deploy
-Order Issued: advance
-Order Issued: bomb
-Order Issued: negotiate
-GameEngine new state: Issue Orders
-Order Executed: deploy
+Command: tournament -M Map\Moon.map -P Cheater Neutral Aggressive -G 5 -D 50
+Command's Effect: Starting a tournament
+GameEngine new state: Start
+Command: loadmap Map\Moon.map
+Command's Effect: Loading Map

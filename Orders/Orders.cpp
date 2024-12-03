@@ -16,11 +16,11 @@ Order::Order(Order* orderCopy): orderName(orderCopy->orderName),next(orderCopy->
 
 Order::~Order(){
     delete playerIndex;
-    playerIndex = NULL;
-    delete next;
-    next=NULL;
-    delete previous;
-    previous=NULL;
+    // playerIndex = NULL;
+    // delete next;
+    // next=NULL;
+    // delete previous;
+    // previous=NULL;
 }
 
 Deploy::Deploy():Order(),toDeploy(nullptr),nUnits(new int (0)) {
@@ -34,7 +34,10 @@ Deploy::Deploy(string orderName,Territory* toDeploy,int* playerIndex,int* nUnits
 
 Deploy::Deploy(Deploy* deployCopy):Order(deployCopy),toDeploy(deployCopy->toDeploy),nUnits(new int(*(deployCopy->nUnits))){ addObserver(loggingObserver);}
 
-Deploy::~Deploy(){}
+Deploy::~Deploy(){
+    delete toDeploy;
+    delete nUnits;
+}
 
 Advance::Advance():Order(),advanceFrom(nullptr),advanceTo(nullptr),nUnits(new int(0)){addObserver(loggingObserver);}
 
@@ -42,7 +45,11 @@ Advance::Advance(string orderName,int* playerIndex,Territory* advanceFrom,Territ
 
 Advance::Advance(Advance* advanceCopy):Order(advanceCopy),advanceFrom(advanceCopy->advanceFrom),advanceTo(advanceCopy->advanceTo),nUnits(advanceCopy->nUnits){addObserver(loggingObserver);}
 
-Advance::~Advance(){}
+Advance::~Advance(){
+    delete advanceFrom;
+    delete advanceTo;
+    delete nUnits;
+}
 
 Bomb::Bomb():Order(),toBomb(nullptr){}
 
@@ -50,13 +57,19 @@ Bomb::Bomb(string orderName,int* playerIndex,Territory* toBomb):Order(orderName,
 
 Bomb::Bomb(Bomb* bombCopy):Order(bombCopy),toBomb(bombCopy->getToBomb()){}
 
+Bomb::~Bomb(){
+    delete toBomb;
+}
+
 Blockade::Blockade():Order(),toBlock(nullptr){addObserver(loggingObserver);}
 
 Blockade::Blockade(string orderName,int* playerIndex,Territory* toBlock):Order(orderName,playerIndex),toBlock(toBlock){addObserver(loggingObserver);}
 
 Blockade::Blockade(Blockade* blockadeCopy):Order(blockadeCopy),toBlock(blockadeCopy->toBlock){addObserver(loggingObserver);}
 
-Blockade::~Blockade(){}
+Blockade::~Blockade(){
+    delete toBlock;
+}
 
 Airlift::Airlift():Order(),airliftFrom(nullptr),airliftTo(nullptr){addObserver(loggingObserver);}
 
@@ -64,7 +77,10 @@ Airlift::Airlift(string orderName,int* playerIndex,Territory* airliftFrom,Territ
 
 Airlift::Airlift(Airlift* airliftCopy):Order(airliftCopy),airliftFrom(airliftCopy->getAirliftFrom()),airliftTo(airliftCopy->getAirliftTo()),nUnits(new int(*(airliftCopy->getnUnits()))){addObserver(loggingObserver);}
 
-Airlift::~Airlift(){}
+Airlift::~Airlift(){
+    delete airliftFrom;
+    delete airliftTo;
+}
 
 Negotiate::Negotiate():Order(){addObserver(loggingObserver);}
 
@@ -74,6 +90,13 @@ Negotiate::Negotiate(Negotiate* negotiateCopy):Order(negotiateCopy){addObserver(
 
 Negotiate::~Negotiate(){}
 
+Cheat::Cheat():Order(){addObserver(loggingObserver);}
+
+Cheat::Cheat(string orderName, int* playerIndex):Order(orderName, playerIndex){addObserver(loggingObserver);}
+
+Cheat::Cheat(Cheat* cheatCopy):Order(cheatCopy){addObserver(loggingObserver);}
+
+Cheat::~Cheat(){};
 //Accessors
 
 string Order::getOrderName(){
@@ -185,13 +208,13 @@ void Deploy::execute(){
 bool Advance::validate(){
     cout<<"Attempting validation of advance order!!"<<endl;
     if(*(advanceFrom->owner)!=*(playerIndex)){
-        cout<<"Unable to execute Advance order!! You do not own "<<advanceFrom->name<<endl;
+        cout<<"Unable to execute Advance order!! You do not own "<<*(advanceFrom->name)<<endl;
         return false;
     }
     else{
         for(auto link : advanceFrom->connections){
            if(link->name==advanceTo->name){
-                if(playerList[*(playerIndex)]->negotiation[*(advanceTo->owner)]){
+                if(playerList.at(*(playerIndex))->negotiation.at(*(advanceTo->owner))){
                     cout<<"We have negotiatiated a cease fire on this group commander!! We cannot execute this order!!"<<endl;
                     return false;
                 }
@@ -210,7 +233,7 @@ void Advance::execute(){
         //Will first check if it is advancing on a territory owned by the player, no one, or by an opponent. If no one owns it or its owned by the player. No need for combat.
         if(*(advanceTo->owner)==*(playerIndex)||*(advanceTo->owner)==-1){
             //If the number of units is greater than the number of units the player can advance form the territory, take the whole army and add it into the territory to advance to and set the territory of where the units came from to 0.
-            if(nUnits>advanceTo->army){
+            if(*(nUnits)>*(advanceTo->army)){
                 *(advanceTo->army)=*(advanceTo->army)+*(advanceFrom->army);
                 *(advanceFrom->army) = 0;
             }
@@ -223,8 +246,16 @@ void Advance::execute(){
         //If its an enemy, combat begins. Setup the attacking units to be the number of units advancing from.
         else{
             cout<<"Entering hostile territory!! Preparing the assault"<<endl;
-            *(advanceFrom->army)=*(advanceFrom->army)-*(nUnits);
-            int attackingUnits = *(nUnits);
+            int attackingUnits;
+            if(*(nUnits)>*(advanceTo->army)){
+                attackingUnits=*(advanceFrom->army);
+                *(advanceFrom->army) = 0;
+            }
+            else{
+                *(advanceFrom->army)=*(advanceFrom->army)-*(nUnits);
+                attackingUnits = *(nUnits);
+            }
+
             //Keep doing this loop until one of the sides has not more units to attack with.
             while(attackingUnits!=0 && *(advanceTo->army)!=0){
                 //Randomizer to calculate the probability during combat. 60% for the army of the opposing territory to lose a unit, and 70% for the player's army to lose a unit.
@@ -246,7 +277,7 @@ void Advance::execute(){
                 *(advanceTo->army)=attackingUnits;
                 cout<<"The attacking player has succeeded in taking over "<<*(advanceTo->name)<<"!!"<<endl;
                 //Update Players owned Territories vector either after executing the function or during.
-                gameEngine.checkWinCon();
+                //gameEngine.checkWinCon();
             }
             else if(attackingUnits==0){
                 cout<<"The defender has successfully drove off the invaders from "<<*(advanceTo->name)<<"!!"<<endl;
@@ -255,6 +286,9 @@ void Advance::execute(){
         }
     }
     Notify(*this);
+    if(*playerIndex!=*advanceTo->owner && playerList.at(*advanceTo->owner)->getPlayerStrategy()=="Neutral"){
+        playerList.at(*advanceTo->owner)->setPlayerStrategy("Aggressive");
+    }
 }
 
 // ----------------------------------------------------------------
@@ -278,6 +312,9 @@ void Bomb::execute(){
     if(this->validate()){
         cout<<"FIRE IN THE HOOOOOOOOOLE!!! "<<*(toBomb->name)<<" will be hit with the bomb and lose half their units!!"<<endl;
         *(toBomb->army) = *(toBomb->army)/2;
+    }
+    if(*playerIndex!=*toBomb->owner && playerList.at(*toBomb->owner)->getPlayerStrategy()=="Neutral"){
+        playerList.at(*toBomb->owner)->setPlayerStrategy("Aggressive");
     }
 }
 
@@ -364,18 +401,37 @@ void Negotiate::execute(){
         //Find the player to negotiate with in the players negotiate array and set it to true
         cout<<"Proceeding to send a cease fire negotiation with player "<<(playerList.at(toNegotiate)->getName())<<endl;
         playerList[toNegotiate]->negotiation[*playerIndex] = true;
+        playerList[*(playerIndex)]->negotiation[toNegotiate] = true;
         Notify(*this);
     }
 }
 
+// ----------------------------------------------------------------
+//                            Cheat
+// ----------------------------------------------------------------
+
+//Order only available to the cheater player strategy
+
+void Cheat::execute(){
+    std::vector<Territory*> owned = playerList.at(*playerIndex)->toDefend();
+    for (int i=0;i<owned.size();i++){
+        for (int j=0;j<owned.at(i)->connections.size();j++){
+            if(*owned.at(i)->connections.at(j)->owner!=playerList.at(*playerIndex)->getID()){
+                *owned.at(i)->connections.at(j)->owner=playerList.at(*playerIndex)->getID();
+                cout<<playerList.at(*playerIndex)->getName()<<" just took "<<*owned.at(i)->connections.at(j)->name<<"\n";
+            }
+        }
+    }
+    Notify(*this);
+}
 //ALL LOGGING
 
 string Deploy::stringToLog() {
-    return "Order Executed: " + orderName;
+    return "Order Executed: " + orderName + " by PlayerID: " + std::to_string(*getPlayerIndex());
 }
 
 string Advance::stringToLog() {
-    return "Order Executed: " + orderName;
+    return "Order Executed: " + orderName + " by PlayerID: " + std::to_string(*getPlayerIndex());
 }
 
 // string Bomb::stringToLog() {
@@ -383,15 +439,19 @@ string Advance::stringToLog() {
 // }
 
 string Blockade::stringToLog() {
-    return "Order Executed: " + orderName;
+    return "Order Executed: " + orderName + " by PlayerID: " + std::to_string(*getPlayerIndex());
 }
 
 string Airlift::stringToLog() {
-    return "Order Executed: " + orderName;
+    return "Order Executed: " + orderName + " by PlayerID: " + std::to_string(*getPlayerIndex());
 }
 
 string Negotiate::stringToLog() {
-    return "Order Executed: " + orderName;
+    return "Order Executed: " + orderName + " by PlayerID: " + std::to_string(*getPlayerIndex());
+}
+
+string Cheat::stringToLog() {
+    return "Order Executed: "+orderName + " by PlayerID: " + std::to_string(*getPlayerIndex());
 }
 
 //operators
@@ -449,12 +509,15 @@ OrdersList::OrdersList(OrdersList* listCopy){
 }
 
 OrdersList::~OrdersList(){
-    delete currentOrder;
-    currentOrder=NULL;
-    delete head;
-    head=NULL;
-    delete tail;
-    tail=NULL;
+
+
+        Order* current = head;
+        while (current != nullptr) {
+            Order* nextNode = current->getNext();
+            delete current;
+            current = nextNode;
+        }
+
 }
 //Accessors and Mutators
 Order* OrdersList::getHead(){
@@ -531,7 +594,7 @@ void OrdersList::addOrder(Deploy* newOrder){
 }
 
 string OrdersList::stringToLog() {
-    return "Order Issued: " + getTail()->getPrevious()->getOrderName();
+    return "Order Issued: " + getTail()->getPrevious()->getOrderName() + " by PlayerID: " + std::to_string(*getTail()->getPrevious()->getPlayerIndex());
 }
 
 void OrdersList::remove(int position){

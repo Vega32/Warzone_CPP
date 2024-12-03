@@ -13,7 +13,7 @@
 #include "../Map/Map.h"
 #include "../Player/Player.h"
 #include "../CommandProcessor/CommandProcessor.h"
-
+#include <iomanip>
 using std::cin;
 using std::cout;
 using std::endl;
@@ -353,6 +353,7 @@ GameEngine gameEngine = GameEngine();
 GameEngine::GameEngine()
 {
     addObserver(loggingObserver);
+    showingTournament = false;
     gameOver = false;
     currentState = new Start();
 }
@@ -360,6 +361,7 @@ GameEngine::GameEngine()
 GameEngine::GameEngine(GameEngine *gameEngine)
 {
     addObserver(loggingObserver);
+    showingTournament = gameEngine->showingTournament;
     gameOver = gameEngine->gameOver;
     currentState = gameEngine->currentState ? gameEngine->currentState->clone() : nullptr;
 }
@@ -368,13 +370,19 @@ void GameEngine::setGameOver(bool b) { gameOver = b; }
 
 void GameEngine::run()
 {
-    string command;
-    
-    cout << "Welcome to Warzone\n"
-         << endl;
-    // Run first state
-    // currentState->enter(*this);
-    startupPhase();
+    cout << "Welcome to Warzone\n" << endl;
+    while (!gameOver) {
+        startupPhase();
+        mainGameLoop();
+    }
+    if (tournamentMode) {
+        showingTournament = true;
+        cout << getResults();
+        Notify(*this);
+
+        winners.clear();
+    }
+    cout << "Thank you for playing!" << endl;
 
     /*while (true)
     {
@@ -419,7 +427,13 @@ void GameEngine::transition(State *state)
 
 
 string GameEngine::stringToLog() {
-    return "GameEngine new state: " + getCurrentState();
+    if (showingTournament) {
+        return getResults();
+    }
+    else {
+        return "GameEngine new state: " + getCurrentState();
+    }
+
 }
 
 
@@ -453,18 +467,115 @@ std::vector<int> turns; // TURNS FOR ISSUING PHASE
 // ----------------------------------------------------------------
 
 void GameEngine::startupPhase()
-{   
+{
+    const int MAX_GAMES = 5;
+    const int MIN_GAMES = 1;
+    const int MIN_MAXTURNS = 10;
+    const int MAX_MAXTURNS = 50;
+    const int MAX_PLAYERS = 4;
+    numTurns = 0;
     this->playerCount = new int(0);
     std::vector<string> args;
     string input;
     while (true)
     {
-        cout << "\nEnter command:";
+        //cout << "\nEnter command:";
         input = commandProcessor->getCommand();
         args = commandProcessor->splitCommand(input);
         if (commandProcessor->validate(input))
         {
-            if (args.at(0) == "loadmap")
+            if (args.at(0) == "tournament") {
+                tournamentMode = true;
+
+                //----------GETTING INFO FROM COMMAND--------
+                int i = 1;
+
+                //Collection of maps and players extracted from command
+                vector<string> playerStrategies;
+
+                //getting map files
+                while (args.at(++i) != "-P") {
+                    mapFiles.push_back(args.at(i));
+                }
+
+                int playerCounter = 0;
+                //Getting player strategies, up to 4, add an Aggressuve player if less than 2.
+                while (args.at(++i) != "-G") {
+                    playerCounter++;
+                    if(playerCounter<=MAX_PLAYERS){
+                        playerStrategies.push_back(args.at(i));
+                        cout<<playerCounter<<endl;
+                    }
+                }
+
+                //Get number of games and max number of turns, check for base cases of minimum 1 game and maximum 5 games
+                numGames = std::stoi(args.at(i+1));
+                if(numGames>MAX_GAMES){
+                    cout<<"The max games you set was too high, we set it to 5"<<endl;
+                    numGames = MAX_GAMES;
+                }
+                else if(numGames<MIN_GAMES){
+                    cout<<"The min games you set was too low, we set it to 1"<<endl;
+                    numGames = MIN_GAMES;
+                }
+                maxTurns = std::stoi(args.at(i+3));
+                if(maxTurns<MIN_MAXTURNS){
+                    cout<<"The turns you set was too low, we set it to 10"<<endl;
+                    maxTurns = MIN_MAXTURNS;
+                }
+                else if(maxTurns>MAX_MAXTURNS){
+                    cout<<"The max turns you set was too high, we set it to 50"<<endl;
+                    maxTurns = MAX_MAXTURNS;
+                }
+
+                cout<<"Max Number of Games: "<<numGames<<endl;
+                cout<<"Max Number of Turns: "<<maxTurns<<endl;
+                for(int i = 0;i < playerStrategies.size();i++){
+                    cout<<"Player "<<(i+1)<<": "<<playerStrategies.at(i)<<endl;
+                }
+
+                system("pause");
+
+                //--------------------------------------------
+
+                //----------WRITING COMMANDS TO A FILE----------
+                //Input File
+                std::ofstream myfile;
+                myfile.open("TournamentCommand.txt");
+
+                //Each of the -G games have -M maps with -P players
+                for (int map_i = 0; map_i < mapFiles.size(); map_i++) {
+                    for (int game_i = 0; game_i < numGames; game_i++) {
+                        myfile << "loadmap " << mapFiles.at(map_i) << "\n";
+                        myfile << "validatemap" << "\n";
+                        
+                        //Addplayers
+                        for (int player_i = 0; player_i < playerStrategies.size(); player_i++) {
+                            string strategy = playerStrategies.at(player_i);
+                            //Player name based on strategy and order
+                            string playerName = strategy[0] + std::to_string(player_i+1);
+                            myfile << "addplayer " << playerName << " " << strategy << "\n";
+                        }
+                        myfile << "gamestart" << "\n";
+                        //Check if last game
+                        myfile << ((game_i == numGames - 1 && map_i == mapFiles.size()-1) ? "quit" : "replay") << "\n";
+                    }
+                }
+                myfile.close();
+                //----------------------------------------------
+
+
+                //----------------Replacing Command Processor-------------------
+                //CmdProc replaced to make sure commands are read from tournament file
+                delete commandProcessor;
+                commandProcessor = new FileCommandProcessorAdapter("TournamentCommand.txt");
+                //--------------------------------------------------------------
+
+                cout << "Starting Tournement\n";
+                transition(new Start());
+
+            }
+            else if (args.at(0) == "loadmap")
             {
                 string fileName;
                 fileName = args.at(1);
@@ -476,6 +587,9 @@ void GameEngine::startupPhase()
                 }
                 else
                 {
+                    if (tournamentMode) {
+                        exit(0);
+                    }
                     transition(new Start());
                 }
             }
@@ -488,6 +602,9 @@ void GameEngine::startupPhase()
                 }
                 else
                 {
+                    if (tournamentMode) {
+                        exit(0);
+                    }
                     cout << "Map is not valid\n";
                     transition(new Start());
                 }
@@ -496,7 +613,11 @@ void GameEngine::startupPhase()
             {
                 string name;
                 name = args.at(1);
-                playerList.push_back(new Player(name, this->playerCount));
+                string strategy = (args.size() == 3) ? args.at(2) : "Human";
+
+                Player *p = new Player(name, this->playerCount, strategy);
+                playerList.push_back(p);
+
                 *(this->playerCount) = *(this->playerCount)+1;
                 transition(new PlayersAdded());
             }
@@ -582,6 +703,7 @@ void GameEngine::mainGameLoop()
 {
     while (gameEngine.getCurrentState() != "Win")
     {
+        numTurns++;
         reinforcementPhase();
 
         gameEngine.transition(new IssueOrders());
@@ -605,15 +727,23 @@ void GameEngine::mainGameLoop()
         }
     }
     std::cout<<"GameOver: \n";
-    transition(new Win());
+    // transition(new Win());
 
     string input=commandProcessor->getCommand();
     if(commandProcessor->validate(input)){
         if(input=="replay"){
-            std::exit(EXIT_SUCCESS);
-        }else if(input=="quit"){
+            gameMap.clear();
+            for (Player* player : playerList) {
+                delete player;  // Free the memory
+            }
+            playerList.clear();  // Clear the vector
+            // gameOver = true;
+            turns.clear();
+            transition(new Start());
+        }
+        else if(input=="quit"){
             transition(new End());
-            std::exit(EXIT_SUCCESS);
+            gameOver = true;
         }
     }
 }
@@ -624,6 +754,7 @@ void GameEngine::mainGameLoop()
 
 void GameEngine::reinforcementPhase()
 {
+    checkWinCon();
     //lets player know reinforcement phase has started
     std::cout << "\nNew troops have arrived!" << endl;
 
@@ -715,15 +846,12 @@ void GameEngine::issueOrdersPhase()
             }
 
             //runs player's turn for giving out orders!
-            else if (*playerList.at(turns.at(i))->_doneTurn == false) {
+            else{
                 displayPlayerInfo(turns.at(i));
                 
                 // Takes in a player's command
-                std::cout<<"\nEnter command:";
-                string command;
-                std::getline(cin, command);
 
-                playerList.at(turns.at(i))->issueOrder(command, &turns.at(i));
+                playerList.at(turns.at(i))->issueOrder();
             }  
         }
         //NOTE: playerList != turns list
@@ -817,10 +945,20 @@ void GameEngine::executeOrdersPhase()
 
 int GameEngine::checkWinCon()
 {
+
+    //Game Draw
+    if (tournamentMode && numTurns > maxTurns) {
+        winners.push_back("Draw");
+        return 1;
+    }
+
     int territoriesOwned[playerList.size()];
+    for(int i=0;i<playerList.size();i++){
+        territoriesOwned[i]=0;
+    }
     int endCon = 1;
     int currentWinner = *gameMap.graph.at(0).owner;
-    territoriesOwned[currentWinner]++;
+    territoriesOwned[currentWinner]=territoriesOwned[currentWinner]+1;
 
     for (int i = 1; i < gameMap.graph.size(); i++)
     {
@@ -832,6 +970,9 @@ int GameEngine::checkWinCon()
     }
     if (endCon == 1)
     {
+        if (tournamentMode) {
+            winners.push_back(playerList.at(currentWinner)->getName());
+        }
         return 1; // Game is over a player owns everything
     }
     for (int j = 0; j < playerList.size(); j++)
@@ -839,11 +980,26 @@ int GameEngine::checkWinCon()
         if (territoriesOwned[j] == 0)
         {
             playerList.erase(playerList.begin() + j);
+            for(int k=0;k<gameMap.graph.size();k++){
+                if(*gameMap.graph.at(k).owner>j){
+                    *gameMap.graph.at(k).owner=*gameMap.graph.at(k).owner-1;
+                }
+            }
+            for(int k=0;k<playerList.size();k++){
+                if(*playerList.at(k)->_id>j){
+                    *playerList.at(k)->_id=*playerList.at(k)->_id-1;
+                }
+            }
             for (int k = 0; k < turns.size(); k++)
             {
                 if (turns[k] == j)
                 {
                     turns.erase(turns.begin() + k);
+                }
+            }
+            for (int k = 0; k < turns.size(); k++){
+                if(turns[k]>j){
+                    turns[k]=turns[k]-1;
                 }
             }
         }
@@ -903,4 +1059,73 @@ void GameEngine::displayPlayerInfo(int id){
     for (int i=0;i<v.size();i++){
         std::cout<<*v.at(i)<<"\n";
     }*/
+}
+
+
+std::string GameEngine::getResults() {
+    size_t numMaps = mapFiles.size();
+
+    std::ostringstream oss;
+
+    oss << "\nTournament mode:" << "\n";
+    oss << "M: ";
+    for (int i = 0; i < numMaps; i++){oss << mapFiles[i] << ", ";}
+    oss << "\n";
+    oss << "P: ";
+    for (int i = 0; i < playerList.size(); i++){ oss << playerList.at(i)->getName() << ", "; }
+    oss << "\n";
+    oss << "G: " << numGames << "\n";
+    oss << "D: " << maxTurns << "\n\n";
+
+    // Calculate column widths
+    size_t mapColumnWidth = 12; // Minimum width for the map names
+    for (const std::string& map : mapFiles) {
+        mapColumnWidth = std::max(mapColumnWidth, map.size());
+    }
+
+    size_t gameColumnWidth = 8; // Minimum width for the game columns
+    for (const std::string& player : winners) {
+        gameColumnWidth = std::max(gameColumnWidth, player.size());
+    }
+
+
+
+    // Border drawing function
+    auto getHorizontalBorder = [&](size_t totalColumns) {
+        std::ostringstream border;
+        border << "+";
+        border << std::string(mapColumnWidth + 2, '-') << "+"; // Map column
+        for (size_t i = 0; i < totalColumns; ++i) {
+            border << std::string(gameColumnWidth + 2, '-') << "+";
+        }
+        border << "\n";
+        return border.str();
+    };
+
+    // Append top border
+    oss << getHorizontalBorder(numGames);
+
+    // Append header row
+    oss << "| " << std::setw(mapColumnWidth) << std::left << "Results:" << " |";
+    for (size_t game = 1; game <= numGames; ++game) {
+        oss << " " << std::setw(gameColumnWidth) << std::left << "Game " + std::to_string(game) << " |";
+    }
+    oss << "\n";
+
+    // Append header bottom border
+    oss << getHorizontalBorder(numGames);
+
+    // Append map rows
+    for (size_t i = 0; i < numMaps; ++i) {
+        oss << "| " << std::setw(mapColumnWidth) << std::left << mapFiles[i] << " |";
+        for (size_t j = 0; j < numGames; ++j) {
+            oss << " " << std::setw(gameColumnWidth) << std::left << winners[i * numGames + j] << " |";
+        }
+        oss << "\n";
+
+        // Append row border
+        oss << getHorizontalBorder(numGames);
+    }
+
+    return oss.str();
 }

@@ -6,8 +6,11 @@
 
 #include <fstream>
 #include <iostream>
+#include <map>
 #include <string>
 #include <sstream>
+#include <regex>
+
 #include "../GameEngine/GameEngine.h"
 
 using std::cin, std::string, std::ifstream;
@@ -69,7 +72,9 @@ vector<string> CommandProcessor::splitCommand(const string command){
 }
 
 string CommandProcessor::getCommand() {
+    std::cerr<<"Command: ";
     string command = readCommand();
+    std::cerr<<"\n";
     saveCommand(command);
     return command;
 
@@ -85,15 +90,30 @@ void CommandProcessor::validate(const void *ptr) {
 }
 
 bool CommandProcessor::validate(const string command){
+    if (command.empty()) {
+        return false;
+    }
     vector<string> args = splitCommand(command);
-    if(args.at(0)=="loadmap"&&(gameEngine.getCurrentState()=="Start"||gameEngine.getCurrentState()=="Map Loaded")&&args.size()>=2){
+
+    if (args.at(0)=="tournament" && gameEngine.getCurrentState()=="Start"){
+        //Regex to see if tournament command is correct
+        std::regex tournamentRegex(R"(tournament -M ([\w\\/]+\.map\s?){1,5}-P (Aggressive\s?|Benevolent\s?|Neutral\s?|Cheater\s?|Human\s?){2,4}-G ([1-5]) -D ([1-4][0-9]|50))");
+
+        if (std::smatch match; std::regex_match(command,match, tournamentRegex)) {
+            currentCommand->saveEffect("Starting a tournament");
+            return true;
+        }
+        return false;
+    }
+    else if(args.at(0)=="loadmap"&&(gameEngine.getCurrentState()=="Start"||gameEngine.getCurrentState()=="Map Loaded")&&args.size()>=2){
         currentCommand->saveEffect("Loading Map");
         return true;
     }else if(args.at(0)=="validatemap"&&gameEngine.getCurrentState()=="Map Loaded"){
         currentCommand->saveEffect("Validating Map");
         return true;
     }else if(args.at(0)=="addplayer"&&(gameEngine.getCurrentState()=="Map Validated"||gameEngine.getCurrentState()=="Players Added")&&args.size()>=2){
-        currentCommand->saveEffect("Adding Player "+args.at(1));
+        string strategy = (args.size() == 3) ? args.at(2) : "Human";
+        currentCommand->saveEffect("Adding Player "+args.at(1) + ", using " + strategy + " Strategy");
         return true;
     }else if(args.at(0)=="gamestart"&&gameEngine.getCurrentState()=="Players Added"){
         currentCommand->saveEffect("Starting Game");
@@ -141,6 +161,7 @@ string FileCommandProcessorAdapter::readCommand() {
 
     string line;
     if (getline(file, line)) {
+        std::cout << line;
         return line;
     } else {
         return "";
